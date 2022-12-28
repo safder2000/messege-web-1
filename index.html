@@ -1,46 +1,75 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Messaging Website</title>
-</head>
-<body>
-  <h1>Send a Message</h1>
-  <form id="message-form">
-    <label for="name">Your Name:</label><br>
-    <input type="text" id="name" name="name"><br>
-    <label for="email">Your Email:</label><br>
-    <input type="text" id="email" name="email"><br>
-    <label for="message">Message:</label><br>
-    <textarea id="message" name="message"></textarea><br>
-    <button type="submit">Send Message</button>
-  </form>
-  <div id="response"></div>
+const express = require('express');
+const app = express();
+const bodyParser = require('body-parser');
+const { Octokit } = require("@octokit/rest");
 
-  <script>
-    // Get the form element
-    var form = document.getElementById("message-form");
+// Replace with your GitHub personal access token
+const GITHUB_TOKEN = 'your-github-token';
 
-    // Handle form submission
-    form.onsubmit = function(event) {
-      event.preventDefault();  // Prevent the form from being submitted
+// Initialize the Octokit library with your personal access token
+const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
-      // Get the form data
-      var name = document.getElementById("name").value;
-      var email = document.getElementById("email").value;
-      var message = document.getElementById("message").value;
+// Set up the body parser middleware
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
 
-      // Send the message to the server
-      var xhr = new XMLHttpRequest();
-      xhr.open("POST", "http://www.example.com/sendmessage", true);
-      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-          // Display the response from the server
-          document.getElementById("response").innerHTML = xhr.responseText;
-        }
-      };
-      xhr.send("name=" + name + "&email=" + email + "&message=" + message);
-    }
-  </script>
-</body>
-</html>
+app.get('/', (req, res) => {
+  // Render the form for receiving a message
+  res.send(`
+    <h1>Send a Message</h1>
+    <form action="/sendmessage" method="post">
+      <label for="name">Your Name:</label><br>
+      <input type="text" id="name" name="name"><br>
+      <label for="email">Your Email:</label><br>
+      <input type="text" id="email" name="email"><br>
+      <label for="message">Message:</label><br>
+      <textarea id="message" name="message"></textarea><br>
+      <button type="submit">Send Message</button>
+    </form>
+  `);
+});
+
+app.post('/sendmessage', async (req, res) => {
+  // Get the form data from the request body
+  const { name, email, message } = req.body;
+
+  // Format the message as Markdown
+  const markdown = `
+## New Message
+
+**From:** ${name} (${email})
+
+${message}
+`;
+
+  try {
+    // Get the repository information
+    const repository = await octokit.repos.get({
+      owner: 'safder2000',
+      repo: 'msg-test2'
+    });
+
+    // Get the latest commit on the repository
+    const commit = await octokit.repos.getCommit({
+      owner: 'safder2000',
+      repo: 'msg-test2',
+      ref: repository.data.default_branch
+    });
+
+    // Get the tree for the latest commit
+    const tree = await octokit.git.getTree({
+      owner: 'safder2000',
+      repo: 'msg-test2',
+      tree_sha: commit.data.commit.tree.sha
+    });
+
+    // Create a new blob with the Markdown content
+    const blob = await octokit.git.createBlob({
+      owner: 'safder2000',
+      repo: 'msg-test2',
+      content: markdown,
+      encoding: 'utf-8'
+    });
+
+    // Create a new tree that includes the new blob
+    const newTree = await octokit.git
